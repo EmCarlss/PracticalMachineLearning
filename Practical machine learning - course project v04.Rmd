@@ -1,0 +1,381 @@
+---
+title: "Practical machine learning - course project"
+author: "EmCarlss"
+date: "`r Sys.Date()`"
+fontsize: 9pt
+output: 
+  html_document:
+    df_print: paged
+  pdf_document:
+          latex_engine: xelatex
+  header-includes: 
+    fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r ref.label="libraries", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="data", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+ 
+```{r ref.label="data_partition", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="means", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="mnom_mod", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="nb_mod", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="rf_mod", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="results", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="rf_tuning", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+```{r ref.label="rf_final_pred", echo=FALSE, results=FALSE,message=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+## The data
+
+We work with a Human Activity Recognition dataset from Ugulino et. al. (2012) consisting of the activity variable "classe" (sitting-down, standing-up, standing, walking, and sitting) as well as several variables from the wearable accelerometers. 4 healthy subjects participated on 8 hours of activities. 
+
+## Data preparation
+
+The training data (pml-training.csv) was partioned further into a training part (65%), test part (15%) and a validation part (10%). We neither can (classe is missing) or should use the real test data (pml-testing.csv) to build the model.
+
+The train part from the pml-training.csv is the bulk data used for building the model. The test part from pml-training was used to compare performance of different algorithms and fine-tune hyperparameters of the chosen final algorithm. To get at more realistic estimate of the out-of-sample error rate we also created a validation part.
+
+A number of columns containing only summary statistics were removed since the same information is already present in other columns but as raw data.\footnote{ Columns starting with "kurtosis\_", "skewness\_", "max\_", "min\_", "var\_", "amplitude\_", "avg\_", "stddev\_"}
+
+The following heatmap shows the data we intend to use for training by the values of the outcome variable classe, but rescaled so that the mean of each variable is 0 and standard deviation 1. Variables with stronger colors (red or blue) may be more helpful for prediction than the other variables.
+
+```{r ref.label="heatmp_rescaled", echo=FALSE, results='asis'}
+
+```
+
+In the model building below however, I decided to proceed with unscaled data.
+
+## Choice of algorithm, cross validation and final model
+
+I first run a multinomial logistic regression on the training data, to get a accuracy score for benchmark. "Classe" was used as outcome and predictors selected by a stepwise feature selection (both directions).
+
+I then tried naive bayes and random forest algorithms with cross validation, k=10, and otherwise standard hyperparameters. This implies that the dataset is trained on 9 (k-1) folds and validated on 1 fold. The random forest algorithm appeared to be far superior in terms of performance (table 1).
+
+```{r ref.label="show.results_1", echo=FALSE, results='asis'}
+
+```
+
+```{r ref.label="show.results_2", echo=FALSE, results='asis'}
+
+```
+
+```{r ref.label="rf_final_plot", echo=FALSE, results='asis'}
+
+```
+
+I decided to go forward with the random forest model and next ran 10 models with different number of trees (table 2). In general, the model does not seem to be particularly sensitive for number of trees. The model with 500 trees seems to suffice as the scores does not increase for a higher number of trees. With 500 trees, the highest accuracy was achieved with a little less than 30 predictors (graph 2).
+
+## Expected out-of-sample error
+
+Brieman and Cutler (2023) note that *"in random forests, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error."* Thus we should be able to rely on the accuracy scores already achieved, implying that the out-of-sample error should be close to zero. In order to confirm this we predict the validation dataset using the  final random forest model. Table 3 shows the results, confirming that out-of-sample error (1-accuracy) is indeed close to zero.
+
+```{r ref.label="rf_final_tbl", echo=FALSE, results='asis'}
+
+```
+
+## References
+
+Brieman and Cutler (2023), *"Random Forests"*, available online: https://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm
+
+Ugulino W., Cardador D., Vega K., Velloso E., Milidiu R., Fuks H. *Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. * Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+## Appendix
+
+```{r libraries, echo=FALSE,fig.show='hide', results=FALSE, message=FALSE}
+library(caret)
+library(dplyr)
+library(ggplot2)
+library(stargazer)
+```
+
+```{r data, echo=FALSE,fig.show='hide', results=FALSE}
+setwd("/Volumes/Lagring/Annat/Programmering/R/Practical machine learning/")
+
+training<-read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv')
+testing<-read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv')
+
+training.sel<-dplyr::select(training,!starts_with(c("user_","new_window","num_window","cvtd","X","kurtosis_","skewness_","max_","min_","var_","amplitude_","avg_","stddev_")))
+training.sel$classe<-factor(training.sel$classe)
+```
+
+```{r data_partition, echo=FALSE,fig.show='hide', results=FALSE}
+inTrain1 = createDataPartition(training.sel$classe, p = 0.65, list = FALSE)
+training.train = training.sel[inTrain1,]
+remaining_data = training.sel[-inTrain1,]
+
+inTrain2 = createDataPartition(remaining_data$classe, p = 0.6, list = FALSE)
+training.test = remaining_data[inTrain2,]
+training.validation = remaining_data[-inTrain2,]
+```
+
+```{r means, echo=FALSE,fig.show='hide', results=FALSE}
+
+# Use aggregate() to calculate averages for each variable and value of "classe"
+training.train_descr<-training.train
+training.train_descr$raw_timestamp_part_1<-training.train_descr$raw_timestamp_part_1/10000000
+
+training.train_descr$raw_timestamp_part_2<-training.train_descr$raw_timestamp_part_2/1000
+
+means <- aggregate(training.train_descr[,1:54], by=list(training.train_descr$classe), mean)
+
+# Transpose the table
+means <- t(means[-1])
+
+# Name new variables
+rownames(means) <- names(training.train_descr)[1:54]
+
+# Name columns
+colnames(means) <- c("A", "B", "C", "D", "E")
+
+# Max and min:s
+min_vals <- apply(training.train_descr[,1:54], 2, min)
+max_vals <- apply(training.train_descr[,1:54], 2, max)
+
+# Add max and mins to means table
+means <- cbind(means, min_vals, max_vals)
+
+# Name new columns
+colnames(means)[ncol(means)-1] <- "Min"
+colnames(means)[ncol(means)] <- "Max"
+
+# Rounding
+means <- round(means, 1)
+
+# Without scientific notation
+format(means, scientific = FALSE)
+
+```
+
+```{r table1, echo=FALSE,fig.show='hide', results='asis'}
+stargazer(means, font.size="scriptsize",header=FALSE, title='Table A1. Min and max for train dataset and mean by outcome value',type='html', digits = 1)
+```
+
+```{r mnom_mod, echo=FALSE,fig.show='hide', results=FALSE}
+# Multinomial logistic regression
+if (!file.exists("mod_mnom.rds")) {
+        mnom.model <- multinom(classe ~ ., data = training.train)
+        step.model <- stepAIC(mnom.model, direction = "both", trace = FALSE)
+        saveRDS(step.model, "mod_mnom.rds")
+}
+
+if (file.exists("mod_mnom.rds")) {
+        step.model <- readRDS("mod_mnom.rds")
+}
+
+predicted.classes <- predict(step.model, newdata = training.test)
+confusion.table <- table(predicted.classes, training.test$classe)
+confusion.table
+
+accuracy <- sum(diag(confusion.table)) / sum(confusion.table)
+accuracy 
+```
+
+```{r nb_mod, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+if (!file.exists("mod_nb.rds")) {
+        mod.nb <- train(classe ~ ., data=training.train, method='nb', trControl=ctrl)
+        saveRDS(mod.nb, "mod_nb.rds")
+}
+
+if (file.exists("mod_nb.rds")) {
+        mod.nb <- readRDS("mod_nb.rds")
+}
+var.imp.nb <- varImp(mod.nb)
+pred.nb<-predict(mod.nb,training.test)
+confusion.nb<-confusionMatrix(pred.nb, factor(training.test$classe))
+bal_accuracy.nb <- mean(confusion.nb$byClass[,"Balanced Accuracy"])
+accuracy.nb <- confusion.nb$overall["Accuracy"]
+specificity.nb <- mean(confusion.nb$byClass[,"Specificity"])
+sensitivity.nb <- mean(confusion.nb$byClass[,"Sensitivity"])  
+```
+
+```{r rf_mod, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+set.seed(123)
+
+if (!file.exists("mod_rf.rds")) {
+        mod.rf <- train(classe ~ ., data=training.train, method='rf', trControl=ctrl)
+        saveRDS(mod.rf, "mod_rf.rds")
+}  
+
+if (file.exists("mod_rf.rds")) {
+        mod.rf <- readRDS("mod_rf.rds")
+}
+
+var.imp.rf <- varImp(mod.rf)
+pred.rf<-predict(mod.rf,training.test)
+confusion.rf<-confusionMatrix(pred.rf, factor(training.test$classe))
+bal_accuracy.rf <- mean(confusion.rf$byClass[,"Balanced Accuracy"])
+accuracy.rf <- confusion.rf$overall["Accuracy"]
+specificity.rf <- mean(confusion.rf$byClass[,"Specificity"])
+sensitivity.rf <- mean(confusion.rf$byClass[,"Sensitivity"]) 
+```
+
+
+```{r results, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+
+results_1 <- data.frame(Model = c("Multinomial logistic", "Naive Bayes", "Random forest (500 trees)"),
+                 Accuracy = c(accuracy, accuracy.nb, accuracy.rf),
+                 `Bal Accuracy` = c(NA, bal_accuracy.nb, bal_accuracy.rf),
+                 Sensitivity = c(NA, sensitivity.nb, sensitivity.rf),
+                 Specificity = c(NA, specificity.nb, specificity.rf))
+results_1 <- results_1[rev(order(results_1$Accuracy)), ]
+```
+
+```{r show.results_1, echo=FALSE,fig.show='hide', results=FALSE}
+stargazer(results_1, font.size="tiny",header=FALSE,summary=FALSE, title='Table 1. Model performance',type='html', digits = 4)
+```
+
+```{r rf_tuning, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+set.seed(123)
+ctrl <- trainControl(method = "cv", returnResamp = "final")
+# Function to run or load a random forest model
+run_or_load_rf <- function(filename, train_data, ctrl) {
+        if (file.exists(filename)) {
+                # Ladda modellen från filen
+                cat("Loading model from file:", filename, "\n")
+                mod.rf <- readRDS(filename)
+        } else {
+                # Träna en ny modell och spara den på disk
+                cat("Training a new model...\n")
+                mod.rf <- train(classe ~ ., data = train_data, method = "rf", trControl = ctrl)
+                saveRDS(mod.rf, filename)
+        }
+        return(mod.rf)
+}
+
+# Specify filenames
+rf_filenames <- paste0("mod_rf_", seq(100, 1000, 100), ".rds")
+
+# Creating results table
+results_2 <- data.frame(
+        No_Trees = numeric(),
+        Bal_Accuracy = numeric(),
+        Accuracy = numeric(),
+        Specificity = numeric(),
+        Sensitivity = numeric()
+)
+
+# Loop through to run or load the models with 100-1000 trees
+for (i in seq(100, 1000, 100)) {
+        # Filename
+        rf_filename <- rf_filenames[i/100]
+        
+        # Run or load
+        mod.rf <- run_or_load_rf(rf_filename, training.train, ctrl)
+        
+        # Predictions & confusionmatrix
+        pred.rf <- predict(mod.rf, training.test)
+        confusion.rf <- confusionMatrix(pred.rf, factor(training.test$classe))
+        
+        # Results
+        bal_accuracy.rf <-           mean(confusion.rf$byClass[,"Balanced Accuracy"])
+        accuracy.rf <- confusion.rf$overall["Accuracy"]
+        specificity.rf <- mean(confusion.rf$byClass[,"Specificity"])
+        sensitivity.rf <- mean(confusion.rf$byClass[,"Sensitivity"])
+        
+# Put results in data frame
+        results_2 <- rbind(results_2, data.frame(No_Trees = i, Bal_Accuracy = bal_accuracy.rf, Accuracy = accuracy.rf, Specificity = specificity.rf, Sensitivity = sensitivity.rf))
+}
+
+# Change rownames to something understandable
+rownames(results_2) <- paste0("Model ", seq(1, nrow(results_2)))
+```
+
+```{r show.results_2, echo=FALSE,fig.show='hide', results=FALSE}
+stargazer(results_2, font.size="scriptsize",header=FALSE,summary=FALSE, title='Table 2. Performance of random forest model for different number of trees',type='html', digits = 4)
+```
+
+```{r rf_final_pred, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+set.seed(123)
+if (!file.exists("mod_rf.rds")) {
+        mod.rf <- train(classe ~ ., data=training.train, method='rf', trControl=ctrl)
+        saveRDS(mod.rf, "mod_rf.rds")
+}  
+
+if (file.exists("mod_rf.rds")) {
+        mod.rf <- readRDS("mod_rf.rds")
+}
+pred_fin.rf <- predict(mod.rf, training.validation)
+confusion_fin.rf<-confusionMatrix(pred_fin.rf,factor(training.validation$classe))
+bal_accuracy_fin.rf <- mean(confusion_fin.rf$byClass[,"Balanced Accuracy"])
+accuracy_fin.rf <- confusion_fin.rf$overall["Accuracy"]
+specificity_fin.rf <- mean(confusion_fin.rf$byClass[,"Specificity"])
+sensitivity_fin.rf <- mean(confusion_fin.rf$byClass[,"Sensitivity"])
+```
+
+```{r rf_final_plot, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+plot(mod.rf, main="Graph 2. Random forest: Accuracy by number of predictors")
+```
+
+```{r rf_final_tbl, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+# Creating results table
+results_3 <- data.frame(
+        Bal_Accuracy = numeric(),
+        Accuracy = numeric(),
+        Specificity = numeric(),
+        Sensitivity = numeric()
+)
+
+results_3 <- rbind(results_3, data.frame(Bal_Accuracy = bal_accuracy_fin.rf, Accuracy = accuracy_fin.rf, Specificity = specificity_fin.rf, Sensitivity = sensitivity_fin.rf))
+
+stargazer(results_3, font.size="tiny",header=FALSE,summary=FALSE, title='Table 3. Model performance',type='html', digits = 4)
+```
+
+```{r heatmp_rescaled, echo=FALSE,fig.show='hide', results=FALSE, warning=FALSE}
+# Rescale data in  training.train 
+preProcValues <- preProcess(training.train[, -length(names(training.train))], method = c("center", "scale"))
+training.train_scaled <- predict(preProcValues, training.train)
+training.train_scaled$classe <- training.train$classe
+
+# Calculate means by value of classe and predictor
+means <- aggregate(training.train_scaled[,1:54], by=list(training.train_scaled$classe), mean)
+
+# Transposing
+means <- t(means[-1])
+
+# Naming variables
+rownames(means) <- names(training.train)[1:54]
+
+# Naming columns
+colnames(means) <- c("A", "B", "C", "D", "E")
+
+# Creating heatmap
+ggplot(data = reshape2::melt(means), aes(x = Var1, y = Var2, fill = value)) +
+        geom_tile() +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+        labs(title = "Graph 1. Rescaled training data by activity and predictor",
+             y = "Classe", x = "Feature")
+
+```
